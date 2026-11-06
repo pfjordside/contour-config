@@ -46,20 +46,40 @@ The app follows the Windows light/dark setting automatically.
 
 - Windows 10 or 11
 - Contour RollerMouse Red Plus Wireless, connected over **Bluetooth** (the USB receiver is untested)
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) to build it, or the .NET 10 Desktop Runtime to run a published build
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) to build it. The installer is self-contained, so the PC you install on doesn't need .NET.
 
 ## Install
 
-Clone the repo and publish to a stable per-user folder:
+Build the setup wizard once:
 
 ```powershell
 git clone https://github.com/pfjordside/contour-config.git
 cd contour-config
+dotnet build .\installer -c Release
+```
+
+Then run `installer\bin\x64\Release\ContourConfigSetup.msi`. You can also copy it to another PC first. The wizard:
+
+1. Installs for your user only into `%LOCALAPPDATA%\Programs\ContourConfig`. You can change the folder. No admin rights are needed.
+2. Adds a **Contour Config** Start menu shortcut.
+3. Offers to launch the app when it finishes.
+
+To **update**, build and run a newer MSI. It closes the running app and replaces the old version. Your settings and *Start with Windows* choice are kept.
+
+To **uninstall**, use *Settings › Apps › Installed apps › Contour Config*. This closes the app and removes its *Start with Windows* entry. Your settings in `%LOCALAPPDATA%\ContourConfig` are left behind. Delete that folder to remove them too.
+
+For a silent install, run `msiexec /i ContourConfigSetup.msi /qn`.
+
+<details>
+<summary>Manual install without the wizard</summary>
+
+```powershell
 dotnet publish .\src\ContourConfig.App -c Release -o "$env:LOCALAPPDATA\Programs\ContourConfig"
 & "$env:LOCALAPPDATA\Programs\ContourConfig\ContourConfig.App.exe"
 ```
 
-To update, close the app (or stop it in Task Manager) and run the `dotnet publish` command again.
+This needs the .NET 10 Desktop Runtime. Don't mix it with the MSI install in the same folder.
+</details>
 
 ## How to use
 
@@ -82,7 +102,7 @@ Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F10</kbd>, click **Stop boost**, untic
 ### Start with Windows
 
 **Start with Windows (minimized)** adds a per-user `ContourConfig` entry under
-`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` that runs the app with `--startup`. Untick it to remove the entry. Always enable it from the published copy in `%LOCALAPPDATA%\Programs\ContourConfig`, not from a development build.
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` that runs the app with `--startup`. Untick it to remove the entry. Always enable it from the installed copy, not from a development build.
 
 ## Troubleshooting
 
@@ -134,6 +154,7 @@ Invalid files show an error and are never applied silently. Version 1 files from
 dotnet build .\ContourConfig.slnx
 dotnet test .\tests\ContourConfig.Core.Tests.Unit
 dotnet run --project .\src\ContourConfig.App
+dotnet build .\installer -c Release   # self-contained publish + MSI (WiX v5), not part of the solution
 ```
 
 | Project                          | Contents                                                                                      |
@@ -141,6 +162,7 @@ dotnet run --project .\src\ContourConfig.App
 | `src/ContourConfig.Core`         | Marker decoding (`EndMarkerMap`), time-based boosting (`EndDriftBooster`), `MarkerLearner`, settings |
 | `src/ContourConfig.App`          | WPF UI (Fluent theme), HID reader (`RollerMouseHid`), `SendInput`, startup registration       |
 | `tests/ContourConfig.Core.Tests.Unit` | xUnit tests for the core logic                                                           |
+| `installer`                      | WiX v5 per-user MSI with setup wizard (`Package.wxs`)                                         |
 
 The build uses .NET 10 with nullable reference types, all analyzers enabled and warnings treated as errors. There are no third-party runtime packages.
 

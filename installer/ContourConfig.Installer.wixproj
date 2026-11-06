@@ -1,0 +1,20 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <OutputName>ContourConfigSetup</OutputName>
+    <Platform>x64</Platform>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <AppPublishDir>$(MSBuildProjectDirectory)\obj\app\</AppPublishDir>
+    <DefineConstants>AppPublishDir=$(AppPublishDir);IconPath=$(MSBuildProjectDirectory)\..\src\ContourConfig.App\ContourConfig.ico</DefineConstants>
+    <!-- Per-user installs keep files under the user profile, which these ICEs assume never happens. -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" />
+    <PackageReference Include="WixToolset.Util.wixext" />
+  </ItemGroup>
+  <!-- Self-contained so the target PC does not need the .NET Desktop Runtime. -->
+  <Target Name="PublishApp" BeforeTargets="BeforeBuild">
+    <RemoveDir Directories="$(AppPublishDir)" />
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\src\ContourConfig.App\ContourConfig.App.csproj&quot; -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o &quot;$(AppPublishDir.TrimEnd('\'))&quot; --nologo" />
+  </Target>
+</Project>

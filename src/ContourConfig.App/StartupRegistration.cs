@@ -6,6 +6,7 @@ namespace ContourConfig.App
     internal static class StartupRegistration
     {
         internal const string StartupArgument = "--startup";
+        internal const string UnregisterArgument = "--unregister-startup";
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string ValueName = "ContourConfig";
 

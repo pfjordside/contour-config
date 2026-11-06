@@ -10,6 +10,21 @@ namespace ContourConfig.App
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Run by the uninstaller so a removed app is not left registered to start with Windows.
+            if (e.Args.Contains(StartupRegistration.UnregisterArgument, StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    StartupRegistration.Set(false);
+                }
+                catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException or System.IO.IOException)
+                {
+                    Shutdown(1);
+                    return;
+                }
+                Shutdown();
+                return;
+            }
             instanceMutex = new(true, @"Local\ContourConfig", out ownsMutex);
             if (!ownsMutex)
             {
