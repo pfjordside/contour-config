@@ -38,6 +38,9 @@ namespace ContourConfig.App
         private HwndSource? source;
         private bool hotkeyRegistered;
         private bool closed;
+        private bool started;
+        private bool trayHintShown;
+        private TrayIcon? tray;
 
         public MainWindow()
         {
@@ -45,7 +48,48 @@ namespace ContourConfig.App
             displayTimer.Tick += OnDisplayTick;
         }
 
-        private async void OnLoaded(object sender, RoutedEventArgs e)
+        // Shows the window, e.g. from the tray icon or when the app is launched again.
+        internal void ShowFromTray()
+        {
+            if (closed)
+            {
+                return;
+            }
+            Show();
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+            _ = Activate();
+        }
+
+        // Starts everything without showing the window (autostart into the notification area).
+        internal void StartHidden() => _ = new WindowInteropHelper(this).EnsureHandle();
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            source?.AddHook(WindowProc);
+            tray = new();
+            tray.OpenRequested += (_, _) => ShowFromTray();
+            tray.BoostChangeRequested += (_, enabled) => EnableBoost.IsChecked = enabled;
+            tray.ExitRequested += (_, _) => Close();
+            _ = InitializeAsync();
+        }
+
+        private void HideToTray()
+        {
+            Hide();
+            if (!trayHintShown)
+            {
+                trayHintShown = true;
+                tray?.ShowNotification("Contour Config is still running",
+                    "It keeps boosting from the notification area. Right-click the icon to exit.");
+            }
+        }
+
+        private async Task InitializeAsync()
         {
             try
             {
@@ -72,8 +116,6 @@ namespace ContourConfig.App
                 return;
             }
 
-            source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
-            source?.AddHook(WindowProc);
             const uint ctrlAltNoRepeat = 0x0002 | 0x0001 | 0x4000;
             const uint f10 = 0x79;
             hotkeyRegistered = source is not null &&
@@ -95,6 +137,7 @@ namespace ContourConfig.App
             updatingStartup = true;
             StartWithWindows.IsChecked = StartupRegistration.IsEnabled();
             updatingStartup = false;
+            started = true;
             if (EnableOnStart.IsChecked == true && hotkeyRegistered)
             {
                 EnableBoost.IsChecked = true;
@@ -127,7 +170,7 @@ namespace ContourConfig.App
 
         private void OnStartWithWindowsChanged(object sender, RoutedEventArgs e)
         {
-            if (updatingStartup || !IsLoaded)
+            if (updatingStartup || !started)
             {
                 return;
             }
@@ -136,7 +179,7 @@ namespace ContourConfig.App
             if (StartupRegistration.IsEnabled() == enabled)
             {
                 Status.Text = enabled
-                    ? "Contour Config will start minimized when you sign in to Windows."
+                    ? "Contour Config will start in the notification area when you sign in to Windows."
                     : "Contour Config will no longer start with Windows.";
             }
         }
@@ -354,6 +397,8 @@ namespace ContourConfig.App
             string right = end == RollerEnd.Right ? "[RIGHT]" : " right ";
             MarkerMonitor.Text = string.Create(CultureInfo.InvariantCulture,
                 $"{left}  {right}   markers=0x{value ?? 0:X2}  reports={reports}\nBoost: {(boosting ? "ON" : "off")}  extra units sent: {Interlocked.Read(ref sentUnits)}");
+            tray?.Update($"Contour Config\nBoost {(boosting ? "on" : "off")} · {(device is null ? "RollerMouse not connected" : "RollerMouse connected")}",
+                EnableBoost.IsChecked == true, EnableBoost.IsEnabled);
         }
 
         private async void OnSaveSettings(object sender, RoutedEventArgs e)
@@ -380,7 +425,7 @@ namespace ContourConfig.App
 
         private void OnOptionsChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (IsLoaded && EnableBoost.IsChecked == true)
+            if (started && EnableBoost.IsChecked == true)
             {
                 StartBoost();
             }
@@ -405,6 +450,14 @@ namespace ContourConfig.App
             if (message == NativeMethods.WmHotkey && wParam == NativeMethods.StopHotkeyId)
             {
                 EmergencyStop();
+                handled = true;
+            }
+            // The close button, Alt+F4 and minimize send the app to the tray. A plain WM_CLOSE
+            // (tray Exit, installer, Windows shutdown) still closes it.
+            else if (message == NativeMethods.WmSysCommand &&
+                (wParam.ToInt64() & 0xFFF0) is NativeMethods.ScClose or NativeMethods.ScMinimize)
+            {
+                HideToTray();
                 handled = true;
             }
             return 0;
@@ -449,9 +502,12 @@ namespace ContourConfig.App
             }
         }
 
-        private void OnClosing(object? sender, CancelEventArgs e)
+        // Runs however the window goes away (Exit, installer WM_CLOSE, or its hidden owner being destroyed).
+        private void OnClosed(object? sender, EventArgs e)
         {
             closed = true;
+            tray?.Dispose();
+            tray = null;
             StopBoost();
             lifetime.Cancel();
             displayTimer.Stop();

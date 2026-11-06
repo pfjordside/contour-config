@@ -4,9 +4,12 @@
     <Platform>x64</Platform>
     <InstallerPlatform>x64</InstallerPlatform>
     <AppPublishDir>$(MSBuildProjectDirectory)\obj\app\</AppPublishDir>
+    <!-- Optional, e.g. -p:AppVersion=1.2.0 from the release workflow. Defaults to the version in the app project. -->
+    <AppVersionArgument Condition="'$(AppVersion)' != ''">-p:Version=$(AppVersion)</AppVersionArgument>
     <DefineConstants>AppPublishDir=$(AppPublishDir);IconPath=$(MSBuildProjectDirectory)\..\src\ContourConfig.App\ContourConfig.ico</DefineConstants>
-    <!-- Per-user installs keep files under the user profile, which these ICEs assume never happens. -->
-    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
+    <!-- Per-user installs keep files under the user profile, which these ICEs assume never happens.
+         ICE61 flags AllowSameVersionUpgrades, which lets rebuilt MSIs of the same version replace each other. -->
+    <SuppressIces>ICE38;ICE61;ICE64;ICE91</SuppressIces>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" />
@@ -15,6 +18,6 @@
   <!-- Self-contained so the target PC does not need the .NET Desktop Runtime. -->
   <Target Name="PublishApp" BeforeTargets="BeforeBuild">
     <RemoveDir Directories="$(AppPublishDir)" />
-    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\src\ContourConfig.App\ContourConfig.App.csproj&quot; -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o &quot;$(AppPublishDir.TrimEnd('\'))&quot; --nologo" />
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\..\src\ContourConfig.App\ContourConfig.App.csproj&quot; -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true $(AppVersionArgument) -o &quot;$(AppPublishDir.TrimEnd('\'))&quot; --nologo" />
   </Target>
 </Project>

@@ -8,6 +8,9 @@ namespace ContourConfig.App
     internal static class NativeMethods
     {
         internal const int WmHotkey = 0x0312;
+        internal const int WmSysCommand = 0x0112;
+        internal const long ScClose = 0xF060;
+        internal const long ScMinimize = 0xF020;
         internal const int StopHotkeyId = 1;
         internal const uint InjectionTag = 0x43445246;
         internal const uint MouseMoveRelative = 0x00000001;
@@ -26,6 +29,14 @@ namespace ContourConfig.App
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool UnregisterHotKey(nint window, int id);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetForegroundWindow(nint window);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool AllowSetForegroundWindow(int processId);
 
         [DllImport("user32.dll", SetLastError = true)]
         internal static extern uint SendInput(uint count, [In] Input[] inputs, int size);

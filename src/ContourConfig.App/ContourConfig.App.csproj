@@ -3,6 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- Only for the notification-area icon (NotifyIcon); the UI itself is WPF. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>ContourConfig.ico</ApplicationIcon>
     <Version>1.0.0</Version>
@@ -11,6 +13,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="ContourConfig.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Avoid WPF/WinForms name clashes (Application, MessageBox, ...). -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ContourConfig.Core\ContourConfig.Core.csproj" />

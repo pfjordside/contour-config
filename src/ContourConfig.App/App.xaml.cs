@@ -5,8 +5,12 @@ namespace ContourConfig.App
 {
     internal sealed partial class ContourApplication : Application
     {
+        private const string ShowEventName = @"Local\ContourConfig.Show";
+        private const int AnyProcess = -1;
         private Mutex? instanceMutex;
         private bool ownsMutex;
+        private EventWaitHandle? showRequest;
+        private RegisteredWaitHandle? showRegistration;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -28,22 +32,38 @@ namespace ContourConfig.App
             instanceMutex = new(true, @"Local\ContourConfig", out ownsMutex);
             if (!ownsMutex)
             {
-                MessageBox.Show("Contour Config is already running. Close the other window before starting another instance.",
-                    "Contour Config", MessageBoxButton.OK, MessageBoxImage.Information);
+                // The running copy is usually hidden in the notification area; ask it to show its window instead.
+                if (EventWaitHandle.TryOpenExisting(ShowEventName, out EventWaitHandle? show))
+                {
+                    using (show)
+                    {
+                        _ = NativeMethods.AllowSetForegroundWindow(AnyProcess);
+                        _ = show.Set();
+                    }
+                }
                 Shutdown();
                 return;
             }
             base.OnStartup(e);
-            MainWindow = new MainWindow();
+            MainWindow window = new();
+            MainWindow = window;
+            showRequest = new(false, EventResetMode.AutoReset, ShowEventName);
+            showRegistration = ThreadPool.RegisterWaitForSingleObject(showRequest,
+                (_, _) => window.Dispatcher.BeginInvoke(window.ShowFromTray), null, Timeout.Infinite, false);
             if (e.Args.Contains(StartupRegistration.StartupArgument, StringComparer.OrdinalIgnoreCase))
             {
-                MainWindow.WindowState = WindowState.Minimized;
+                window.StartHidden();
             }
-            MainWindow.Show();
+            else
+            {
+                window.ShowFromTray();
+            }
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
+            _ = showRegistration?.Unregister(null);
+            showRequest?.Dispose();
             if (ownsMutex)
             {
                 instanceMutex?.ReleaseMutex();

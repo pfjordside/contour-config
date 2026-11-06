@@ -1,0 +1,37 @@
+name: Release
+
+# Push a tag such as v1.0.0 to build ContourConfigSetup.msi and publish it as a GitHub Release.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Test
+        run: dotnet test .\tests\ContourConfig.Core.Tests.Unit -c Release
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          dotnet build .\installer -c Release -p:AppVersion=$version
+          Copy-Item .\installer\bin\x64\Release\ContourConfigSetup.msi ".\ContourConfigSetup-$version.msi"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          gh release create "${{ github.ref_name }}" ".\ContourConfigSetup-$version.msi" --title "Contour Config $version" --generate-notes
