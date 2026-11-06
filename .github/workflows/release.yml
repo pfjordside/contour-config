@@ -1,9 +1,16 @@
 name: Release
 
-# Push a tag such as v1.0.0 to build ContourConfigSetup.msi and publish it as a GitHub Release.
+# Builds ContourConfigSetup-<version>.msi and publishes it as a GitHub Release.
+# Trigger it by pushing a tag such as v1.0.0, or run it manually from the Actions tab with a version.
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.0.1 (creates tag v1.0.1 on the selected branch)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,8 +18,18 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate version
+        id: version
+        shell: pwsh
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$version' must look like 1.2.3." }
+          "value=$version" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -24,7 +41,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
+          $version = "${{ steps.version.outputs.value }}"
           dotnet build .\installer -c Release -p:AppVersion=$version
           Copy-Item .\installer\bin\x64\Release\ContourConfigSetup.msi ".\ContourConfigSetup-$version.msi"
 
@@ -33,5 +50,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          gh release create "${{ github.ref_name }}" ".\ContourConfigSetup-$version.msi" --title "Contour Config $version" --generate-notes
+          $version = "${{ steps.version.outputs.value }}"
+          # For manual runs the tag does not exist yet; gh creates it on the commit that was built.
+          gh release create $env:TAG ".\ContourConfigSetup-$version.msi" --target "${{ github.sha }}" --title "Contour Config $version" --generate-notes

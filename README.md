@@ -158,7 +158,7 @@ dotnet run --project .\src\ContourConfig.App
 dotnet build .\installer -c Release   # self-contained publish + MSI (WiX v5), not part of the solution
 ```
 
-To publish a release, push a version tag, for example `git tag v1.0.0; git push origin v1.0.0`. The [Release workflow](.github/workflows/release.yml) runs the tests, builds `ContourConfigSetup-1.0.0.msi` with that version and attaches it to a new GitHub Release. Use a higher version for every release so the MSI upgrades older installs.
+To publish a release, either run the [Release workflow](.github/workflows/release.yml) manually (*Actions › Release › Run workflow*, enter a version such as `1.0.0`), or push a version tag, for example `git tag v1.0.0; git push origin v1.0.0`. The workflow runs the tests, builds `ContourConfigSetup-1.0.0.msi` with that version and attaches it to a new GitHub Release (a manual run also creates the `v1.0.0` tag). Use a higher version for every release so the MSI upgrades older installs.
 
 | Project                          | Contents                                                                                      |
 |----------------------------------|-----------------------------------------------------------------------------------------------|
