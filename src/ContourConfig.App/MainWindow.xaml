@@ -1,0 +1,85 @@
+<Window x:Class="ContourConfig.App.MainWindow"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Contour Config - roller end drift" Width="820" Height="860"
+        MinWidth="680" MinHeight="600" Background="#F4F7FA"
+        Loaded="OnLoaded" Closing="OnClosing">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="28">
+      <TextBlock Text="RollerMouse end-drift booster" FontSize="26" FontWeight="SemiBold" />
+      <TextBlock Margin="0,6,0,18" TextWrapping="Wrap"
+                 Text="Listens for the RollerMouse's own roller-end signals and adds extra sideways movement while an end is held. Normal pointer movement is not changed." />
+      <GroupBox Header="1. Device">
+        <StackPanel>
+          <DockPanel>
+            <Button Content="Reconnect" DockPanel.Dock="Right" Margin="12,0,0,0" Click="OnReconnect" />
+            <TextBlock x:Name="DeviceStatus" Text="Looking for the RollerMouse..." TextWrapping="Wrap" VerticalAlignment="Center" />
+          </DockPanel>
+          <TextBlock Margin="0,10,0,0" TextWrapping="Wrap"
+                     Text="Keep Contour's own cursor drift set to Slow or Fast (not Immediate). The end signals may not be sent when drift is Off." />
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="2. End markers">
+        <StackPanel>
+          <TextBlock x:Name="MarkerMonitor" FontFamily="Consolas" FontSize="15" Text="Waiting for reports..." />
+          <TextBlock x:Name="MarkerMapping" Margin="0,8,0,10" Text="" />
+          <TextBlock TextWrapping="Wrap" Margin="0,0,0,10"
+                     Text="Hold an end and check the monitor shows LEFT or RIGHT. If it is wrong, click Learn and hold that end of the roller for 4 seconds." />
+          <WrapPanel>
+            <Button x:Name="LearnLeft" Content="Learn left end" Click="OnLearnLeft" />
+            <Button x:Name="LearnRight" Content="Learn right end" Click="OnLearnRight" />
+            <Button Content="Reset to defaults" Click="OnResetMarkers" />
+          </WrapPanel>
+        </StackPanel>
+      </GroupBox>
+      <GroupBox Header="3. Additional drift speed">
+        <StackPanel>
+          <TextBlock Text="Extra pixels/second added on top of Contour's drift while an end is held."
+                     TextWrapping="Wrap" Margin="0,0,0,10" />
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="80" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="75" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="36" />
+              <RowDefinition Height="36" />
+              <RowDefinition Height="36" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Left" VerticalAlignment="Center" />
+            <Slider x:Name="LeftSpeed" Grid.Column="1" Minimum="0" Maximum="8000" Value="1500"
+                    TickFrequency="100" IsSnapToTickEnabled="True" ValueChanged="OnOptionsChanged"
+                    AutomationProperties.Name="Left additional speed" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Text="{Binding ElementName=LeftSpeed, Path=Value, StringFormat={}{0:0}}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Text="Right" VerticalAlignment="Center" />
+            <Slider x:Name="RightSpeed" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="8000" Value="1500"
+                    TickFrequency="100" IsSnapToTickEnabled="True" ValueChanged="OnOptionsChanged"
+                    AutomationProperties.Name="Right additional speed" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding ElementName=RightSpeed, Path=Value, StringFormat={}{0:0}}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="2" Text="Delay" VerticalAlignment="Center" />
+            <Slider x:Name="Delay" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="2000" Value="300"
+                    TickFrequency="50" IsSnapToTickEnabled="True" ValueChanged="OnOptionsChanged"
+                    AutomationProperties.Name="Activation delay" VerticalAlignment="Center" />
+            <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding ElementName=Delay, Path=Value, StringFormat={}{0:0} ms}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+          </Grid>
+          <TextBlock Margin="0,10,0,12" TextWrapping="Wrap"
+                     Text="The delay ignores brief accidental touches of an end. Boosting stops automatically after 15 seconds of continuous hold." />
+          <CheckBox x:Name="EnableBoost" Content="Enable boost" Checked="OnEnableBoost" Unchecked="OnDisableBoost" />
+          <TextBlock Margin="0,10,0,12" FontWeight="SemiBold" Text="Emergency stop: Ctrl + Alt + F10. Closing this app also stops boosting." />
+          <WrapPanel>
+            <Button Content="Stop boost" Click="OnStopBoost" />
+            <Button x:Name="SaveSettings" Content="Save settings" Click="OnSaveSettings" />
+          </WrapPanel>
+        </StackPanel>
+      </GroupBox>
+      <Border Background="#E2EAF3" Padding="12" CornerRadius="6">
+        <TextBlock x:Name="Status" Text="Boost is off." TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ContourConfig.Core/ContourConfig.Core.csproj" />
+    <Project Path="src/ContourConfig.App/ContourConfig.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ContourConfig.Core.Tests.Unit/ContourConfig.Core.Tests.Unit.csproj" />
+  </Folder>
+</Solution>
