@@ -3,7 +3,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Contour Config - roller end drift" Width="820" Height="860"
-        MinWidth="680" MinHeight="600" Background="#F4F7FA"
+        MinWidth="680" MinHeight="600" Icon="ContourConfig.ico"
         Loaded="OnLoaded" Closing="OnClosing">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="28">
@@ -70,14 +70,18 @@
           <TextBlock Margin="0,10,0,12" TextWrapping="Wrap"
                      Text="The delay ignores brief accidental touches of an end. Boosting stops automatically after 15 seconds of continuous hold." />
           <CheckBox x:Name="EnableBoost" Content="Enable boost" Checked="OnEnableBoost" Unchecked="OnDisableBoost" />
+          <CheckBox x:Name="EnableOnStart" Margin="0,8,0,0" Content="Enable boost automatically when the app starts (saved with settings)" />
+          <CheckBox x:Name="StartWithWindows" Margin="0,8,0,0" Content="Start with Windows (minimized)"
+                    Checked="OnStartWithWindowsChanged" Unchecked="OnStartWithWindowsChanged" />
           <TextBlock Margin="0,10,0,12" FontWeight="SemiBold" Text="Emergency stop: Ctrl + Alt + F10. Closing this app also stops boosting." />
           <WrapPanel>
             <Button Content="Stop boost" Click="OnStopBoost" />
-            <Button x:Name="SaveSettings" Content="Save settings" Click="OnSaveSettings" />
+            <Button x:Name="SaveSettings" Content="Save settings" Click="OnSaveSettings" Style="{StaticResource PrimaryButton}" />
           </WrapPanel>
         </StackPanel>
       </GroupBox>
-      <Border Background="#E2EAF3" Padding="12" CornerRadius="6">
+      <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+              BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12" CornerRadius="6">
         <TextBlock x:Name="Status" Text="Boost is off." TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
       </Border>
     </StackPanel>

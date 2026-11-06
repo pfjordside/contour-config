@@ -20,6 +20,10 @@ namespace ContourConfig.App
             }
             base.OnStartup(e);
             MainWindow = new MainWindow();
+            if (e.Args.Contains(StartupRegistration.StartupArgument, StringComparer.OrdinalIgnoreCase))
+            {
+                MainWindow.WindowState = WindowState.Minimized;
+            }
             MainWindow.Show();
         }
 

@@ -7,6 +7,7 @@ namespace ContourConfig.Core
         public int Version { get; init; } = CurrentVersion;
         public DriftOptions Options { get; init; } = new();
         public EndMarkerMap Markers { get; init; } = new();
+        public bool EnableBoostOnStart { get; init; }
 
         public void Validate()
         {

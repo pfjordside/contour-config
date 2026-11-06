@@ -20,6 +20,8 @@ namespace ContourConfig.App
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ContourConfig", "settings.json"));
         private readonly CancellationTokenSource lifetime = new();
         private readonly DispatcherTimer displayTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+        private readonly DispatcherTimer reconnectTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+        private bool updatingStartup;
         private readonly Stopwatch clock = Stopwatch.StartNew();
         // Guards state shared between the HID read loop, the boost thread and the UI thread.
         private readonly Lock gate = new();
@@ -54,6 +56,7 @@ namespace ContourConfig.App
                     RightSpeed.Value = saved.Options.RightAdditionalSpeed;
                     Delay.Value = saved.Options.ActivationDelayMilliseconds;
                     markers = saved.Markers;
+                    EnableOnStart.IsChecked = saved.EnableBoostOnStart;
                 }
             }
             catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
@@ -87,6 +90,55 @@ namespace ContourConfig.App
             ShowMarkerMapping();
             Connect();
             displayTimer.Start();
+            reconnectTimer.Tick += OnReconnectTick;
+            reconnectTimer.Start();
+            updatingStartup = true;
+            StartWithWindows.IsChecked = StartupRegistration.IsEnabled();
+            updatingStartup = false;
+            if (EnableOnStart.IsChecked == true && hotkeyRegistered)
+            {
+                EnableBoost.IsChecked = true;
+            }
+        }
+
+        private void OnReconnectTick(object? sender, EventArgs e)
+        {
+            // Bluetooth devices disappear while asleep; quietly retry so autostart works without clicking Reconnect.
+            if (device is null && !closed)
+            {
+                Connect();
+            }
+        }
+
+        private void SetStartup(bool enabled)
+        {
+            try
+            {
+                StartupRegistration.Set(enabled);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+            {
+                ShowError($"Could not change Start with Windows: {exception.Message}");
+                updatingStartup = true;
+                StartWithWindows.IsChecked = StartupRegistration.IsEnabled();
+                updatingStartup = false;
+            }
+        }
+
+        private void OnStartWithWindowsChanged(object sender, RoutedEventArgs e)
+        {
+            if (updatingStartup || !IsLoaded)
+            {
+                return;
+            }
+            bool enabled = StartWithWindows.IsChecked == true;
+            SetStartup(enabled);
+            if (StartupRegistration.IsEnabled() == enabled)
+            {
+                Status.Text = enabled
+                    ? "Contour Config will start minimized when you sign in to Windows."
+                    : "Contour Config will no longer start with Windows.";
+            }
         }
 
         private void Connect()
@@ -103,7 +155,7 @@ namespace ContourConfig.App
             }
             if (device is null)
             {
-                DeviceStatus.Text = "RollerMouse not found. Make sure it is connected and awake, then click Reconnect.";
+                DeviceStatus.Text = "RollerMouse not found. Waiting for it to connect (move it to wake it up)...";
                 return;
             }
             DeviceStatus.Text = "Connected to the RollerMouse end-marker channel.";
@@ -123,7 +175,7 @@ namespace ContourConfig.App
 
         private async Task ReadLoopAsync(RollerMouseHid hid, CancellationToken cancellationToken)
         {
-            string message = "RollerMouse disconnected. Click Reconnect when it is back.";
+            string message = "RollerMouse disconnected. Reconnecting automatically when it is back...";
             try
             {
                 await hid.ReadAsync(OnReport, cancellationToken).ConfigureAwait(false);
@@ -138,13 +190,14 @@ namespace ContourConfig.App
                 {
                     return;
                 }
-                message = $"Lost the RollerMouse ({exception.Message}). Click Reconnect when it is back.";
+                message = $"Lost the RollerMouse ({exception.Message}). Reconnecting automatically when it is back...";
             }
             SetEnd(RollerEnd.None);
             _ = Dispatcher.BeginInvoke(() =>
             {
                 if (!closed && device == hid)
                 {
+                    Disconnect();
                     DeviceStatus.Text = message;
                 }
             });
@@ -307,7 +360,12 @@ namespace ContourConfig.App
         {
             try
             {
-                await settingsStore.SaveAsync(new() { Options = ReadOptions(), Markers = markers }, lifetime.Token);
+                await settingsStore.SaveAsync(new()
+                {
+                    Options = ReadOptions(),
+                    Markers = markers,
+                    EnableBoostOnStart = EnableOnStart.IsChecked == true
+                }, lifetime.Token);
                 Status.Text = "Settings saved.";
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
@@ -354,20 +412,41 @@ namespace ContourConfig.App
 
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
         {
+            bool resumed = e.Mode == PowerModes.Resume;
             _ = Dispatcher.BeginInvoke(() =>
             {
                 EmergencyStop();
                 Status.Text = "Power state changed. Boost is off.";
+                if (resumed)
+                {
+                    Connect();
+                    RestoreAutomaticBoost();
+                }
             });
         }
 
         private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
         {
+            bool returned = e.Reason is SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon
+                or SessionSwitchReason.ConsoleConnect or SessionSwitchReason.RemoteConnect;
             _ = Dispatcher.BeginInvoke(() =>
             {
                 EmergencyStop();
                 Status.Text = "Windows session changed. Boost is off.";
+                if (returned)
+                {
+                    RestoreAutomaticBoost();
+                }
             });
+        }
+
+        // Only the explicit "enable automatically" setting turns boost back on after a lock or sleep.
+        private void RestoreAutomaticBoost()
+        {
+            if (!closed && hotkeyRegistered && EnableOnStart.IsChecked == true)
+            {
+                EnableBoost.IsChecked = true;
+            }
         }
 
         private void OnClosing(object? sender, CancelEventArgs e)
@@ -376,6 +455,7 @@ namespace ContourConfig.App
             StopBoost();
             lifetime.Cancel();
             displayTimer.Stop();
+            reconnectTimer.Stop();
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             SystemEvents.SessionSwitch -= OnSessionSwitch;
             if (hotkeyRegistered && source is not null)

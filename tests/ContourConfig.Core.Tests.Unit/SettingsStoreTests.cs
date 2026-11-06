@@ -14,7 +14,8 @@ namespace ContourConfig.Core.Tests.Unit
             DriftConfiguration expected = new()
             {
                 Options = new(800, 1600, 600, 20000),
-                Markers = new(0x10, 0x20)
+                Markers = new(0x10, 0x20),
+                EnableBoostOnStart = true
             };
 
             await store.SaveAsync(expected, TestContextToken);
