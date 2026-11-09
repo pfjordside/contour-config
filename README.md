@@ -5,7 +5,7 @@
 <h1 align="center">Contour Config</h1>
 
 <p align="center">
-  Faster, safer end-of-roller cursor drift for the <b>Contour RollerMouse Red Plus Wireless</b> on Windows.
+  Faster, safer end-of-roller cursor drift for <b>Contour RollerMouse</b> devices on Windows.
 </p>
 
 ---
@@ -35,7 +35,7 @@ The app follows the Windows light/dark setting automatically.
 - ⚡ **Adjustable drift boost:** 0–8000 extra pixels per second, set separately for the left and right ends.
 - ⏱️ **Activation delay:** 0–2000 ms, so brief accidental touches are ignored.
 - 🎯 **Uses the hardware end signal:** normal pointer movement is never changed.
-- 🧠 **Learn mode:** detects which signal belongs to which end if your device differs.
+- 🎯 **Roller-end indicators:** verify that your mouse reports the left and right ends.
 - 🚀 **Start with Windows:** starts quietly in the notification area at sign-in and turns the boost on automatically.
 - 🖱️ **Lives in the notification area:** no taskbar button. Left-click the tray icon to open the window, right-click for *Open*, *Boost enabled* and *Exit*.
 - 🔌 **Auto-reconnect:** handles the mouse sleeping, Bluetooth reconnects, lock/unlock and sleep/resume.
@@ -46,7 +46,7 @@ The app follows the Windows light/dark setting automatically.
 ## Requirements
 
 - Windows 10 or 11
-- Contour RollerMouse Red Plus Wireless, connected over **Bluetooth** (the USB receiver is untested)
+- A Contour RollerMouse with compatible end-marker reports. Tested with the **RollerMouse Red Plus Wireless** over Bluetooth and the **RollerMouse Pro3**. Other models and connections may work but have not been verified.
 - Nothing else. The installer includes .NET. Building from source needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ## Install
@@ -81,8 +81,7 @@ The MSI is written to `installer\bin\x64\Release\ContourConfigSetup.msi`.
 1. **Set Contour's drift to Slow or Fast.** In Contour's own config tool, choose *Slow* or *Fast*, not *Immediate*. The mouse may not send the end signal when drift is *Off*.
    (If you don't want Contour's software running, you can uninstall it afterwards. The setting is stored in the mouse.)
 2. **Check the connection.** Section **1. Device** should say *Connected to the RollerMouse end-marker channel*. If the mouse is asleep, move it and the app reconnects within a few seconds.
-3. **Check the end markers.** Push the roller to the left end and hold it. The monitor in **2. End markers** should show `[LEFT]`. Do the same for the right end, which should show `[RIGHT]`.
-   If an end shows the wrong side or nothing, click **Learn left end** or **Learn right end** and hold that end for 4 seconds.
+3. **Check the roller ends.** Push the roller to each end and hold it. The corresponding **Left** or **Right** indicator in **2. Roller ends** should light up.
 4. **Tune the speed.** In **3. Additional drift speed**:
    - **Left / Right:** the extra pixels per second, added on top of Contour's own drift. Start around 1500 and adjust to taste.
    - **Delay:** how long an end must be held before the boost starts. Use 0 ms for instant boost, or 200–400 ms if you often touch the ends by accident.
@@ -109,15 +108,15 @@ Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F10</kbd>, click **Stop boost**, untic
 
 | Symptom                                    | Try                                                                                   |
 |--------------------------------------------|---------------------------------------------------------------------------------------|
-| *RollerMouse not found*                    | Move the mouse to wake it and wait a few seconds. Check it's paired in Bluetooth settings. |
-| Monitor never shows `[LEFT]` / `[RIGHT]`   | Make sure Contour's drift is *Slow* or *Fast*, then use **Learn**.                    |
+| *RollerMouse not found*                    | Move the mouse to wake it and wait a few seconds. Check its connection or Bluetooth pairing. |
+| A roller-end indicator doesn't light up or shows the wrong side | Make sure Contour's drift is *Slow* or *Fast*. Your model or connection may use a different end-marker protocol. |
 | Boost doesn't work in some windows         | Windows blocks injected input into apps running as administrator.                     |
 | *Could not register Ctrl+Alt+F10*          | Another app uses that shortcut. Boost stays disabled without an emergency stop.        |
 | Can't find the window                      | It's hidden in the notification area. Click the tray icon (check the **^** flyout), or start Contour Config again from the Start menu. |
 
 ## How it works
 
-The RollerMouse exposes several HID collections over Bluetooth (`VID 0B33`, `PID 1006`). Its consumer-control collection sends input report `0x03` whenever its state changes. **Byte 7** of that report is a bitfield:
+The app looks for a Contour HID consumer-control collection (`VID 0B33`). On the tested devices, input report `0x03` carries the roller-end state in **byte 7**:
 
 | Bit    | Meaning                     |
 |--------|-----------------------------|
@@ -148,6 +147,7 @@ Settings are stored in `%LOCALAPPDATA%\ContourConfig\settings.json`:
 ```
 
 Invalid files show an error and are never applied silently. Version 1 files from the early prototype are migrated: their speeds are kept.
+Earlier versions may have saved custom marker masks; those masks are still used. To restore the defaults, exit the app and change `LeftMask` to `4` and `RightMask` to `8` in the settings file.
 
 ## Development
 
@@ -162,7 +162,7 @@ To publish a release, either run the [Release workflow](.github/workflows/releas
 
 | Project                          | Contents                                                                                      |
 |----------------------------------|-----------------------------------------------------------------------------------------------|
-| `src/ContourConfig.Core`         | Marker decoding (`EndMarkerMap`), time-based boosting (`EndDriftBooster`), `MarkerLearner`, settings |
+| `src/ContourConfig.Core`         | Marker decoding (`EndMarkerMap`), time-based boosting (`EndDriftBooster`), settings |
 | `src/ContourConfig.App`          | WPF UI (Fluent theme), HID reader (`RollerMouseHid`), `SendInput`, tray icon, startup        |
 | `tests/ContourConfig.Core.Tests.Unit` | xUnit tests for the core logic                                                           |
 | `installer`                      | WiX v5 per-user MSI with setup wizard (`Package.wxs`)                                         |

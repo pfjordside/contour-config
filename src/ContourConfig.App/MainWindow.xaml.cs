@@ -7,6 +7,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
@@ -14,8 +15,6 @@ namespace ContourConfig.App
 {
     internal sealed partial class MainWindow : Window
     {
-        private const int LearnMilliseconds = 4000;
-        private const int MinimumLearnedHoldMilliseconds = 1500;
         private readonly SettingsStore settingsStore = new(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ContourConfig", "settings.json"));
         private readonly CancellationTokenSource lifetime = new();
@@ -29,11 +28,8 @@ namespace ContourConfig.App
         private RollerMouseHid? device;
         private CancellationTokenSource? connection;
         private EndDriftBooster? booster;
-        private MarkerLearner? learner;
         private RollerEnd currentEnd;
-        private byte? lastMarkers;
-        private long reportCount;
-        private long sentUnits;
+        private RollerEnd? shownEnd;
         private Thread? boostThread;
         private HwndSource? source;
         private bool hotkeyRegistered;
@@ -129,7 +125,6 @@ namespace ContourConfig.App
             SystemEvents.SessionSwitch += OnSessionSwitch;
             boostThread = new(BoostLoop) { IsBackground = true, Name = "Drift boost", Priority = ThreadPriority.AboveNormal };
             boostThread.Start();
-            ShowMarkerMapping();
             Connect();
             displayTimer.Start();
             reconnectTimer.Tick += OnReconnectTick;
@@ -251,15 +246,11 @@ namespace ContourConfig.App
             double now = clock.Elapsed.TotalMilliseconds;
             lock (gate)
             {
-                reportCount++;
-                if (EndMarkerMap.ReadMarkerByte(report) is not byte value)
+                if (markers.Decode(report) is RollerEnd end)
                 {
-                    return;
+                    currentEnd = end;
+                    booster?.Update(end, now);
                 }
-                lastMarkers = value;
-                learner?.Observe(value, now);
-                currentEnd = markers.Decode(report) ?? RollerEnd.None;
-                booster?.Update(currentEnd, now);
             }
         }
 
@@ -290,10 +281,7 @@ namespace ContourConfig.App
                         Flags = NativeMethods.MouseMoveRelative,
                         ExtraInfo = NativeMethods.InjectionTag
                     };
-                    if (NativeMethods.SendInput(1, input, Marshal.SizeOf<NativeMethods.Input>()) == 1)
-                    {
-                        Interlocked.Add(ref sentUnits, Math.Abs(dx));
-                    }
+                    _ = NativeMethods.SendInput(1, input, Marshal.SizeOf<NativeMethods.Input>());
                 }
                 Thread.Sleep(5);
             }
@@ -326,79 +314,36 @@ namespace ContourConfig.App
             Status.Text = "Boost stopped.";
         }
 
-        private async Task LearnAsync(RollerEnd end)
-        {
-            EmergencyStop();
-            LearnLeft.IsEnabled = LearnRight.IsEnabled = false;
-            Status.Text = $"Hold the {(end == RollerEnd.Left ? "left" : "right")} end of the roller now for {LearnMilliseconds / 1000} seconds...";
-            lock (gate)
-            {
-                learner = new();
-                learner.Observe(lastMarkers ?? 0, clock.Elapsed.TotalMilliseconds);
-            }
-            try
-            {
-                await Task.Delay(LearnMilliseconds, lifetime.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            finally
-            {
-                LearnLeft.IsEnabled = LearnRight.IsEnabled = true;
-            }
-            byte? mask;
-            lock (gate)
-            {
-                mask = learner?.Finish(clock.Elapsed.TotalMilliseconds, MinimumLearnedHoldMilliseconds);
-                learner = null;
-            }
-            if (mask is not byte learned)
-            {
-                ShowError("No end marker was held long enough. Check the Contour drift setting is Slow or Fast and try again.");
-                return;
-            }
-            EndMarkerMap updated = end == RollerEnd.Left ? markers with { LeftMask = learned } : markers with { RightMask = learned };
-            try
-            {
-                updated.Validate();
-            }
-            catch (ArgumentException exception)
-            {
-                ShowError($"Learned 0x{learned:X2}, but {exception.Message} Learn the other end again.");
-                return;
-            }
-            lock (gate)
-            {
-                markers = updated;
-            }
-            ShowMarkerMapping();
-            Status.Text = string.Create(CultureInfo.InvariantCulture, $"Learned {end} end = 0x{learned:X2}. Click Save settings to keep it.");
-        }
-
-        private void ShowMarkerMapping() => MarkerMapping.Text = string.Create(CultureInfo.InvariantCulture,
-            $"Mapping: left = 0x{markers.LeftMask:X2}, right = 0x{markers.RightMask:X2} (report 0x{EndMarkerMap.ReportId:X2}, byte {EndMarkerMap.MarkerByteIndex})");
-
         private void OnDisplayTick(object? sender, EventArgs e)
         {
-            byte? value;
             RollerEnd end;
-            long reports;
             bool boosting;
             lock (gate)
             {
-                value = lastMarkers;
                 end = currentEnd;
-                reports = reportCount;
                 boosting = booster is not null;
             }
-            string left = end == RollerEnd.Left ? "[LEFT]" : " left ";
-            string right = end == RollerEnd.Right ? "[RIGHT]" : " right ";
-            MarkerMonitor.Text = string.Create(CultureInfo.InvariantCulture,
-                $"{left}  {right}   markers=0x{value ?? 0:X2}  reports={reports}\nBoost: {(boosting ? "ON" : "off")}  extra units sent: {Interlocked.Read(ref sentUnits)}");
+            if (end != shownEnd)
+            {
+                shownEnd = end;
+                ShowIndicator(LeftIndicator, LeftIndicatorText, end == RollerEnd.Left);
+                ShowIndicator(RightIndicator, RightIndicatorText, end == RollerEnd.Right);
+            }
+            BoostState.Text = boosting ? "Boost is on" : "Boost is off";
             tray?.Update($"Contour Config\nBoost {(boosting ? "on" : "off")} · {(device is null ? "RollerMouse not connected" : "RollerMouse connected")}",
                 EnableBoost.IsChecked == true, EnableBoost.IsEnabled);
+        }
+
+        // Theme brushes are referenced (not copied) so the indicators follow light/dark mode changes.
+        private static void ShowIndicator(Border indicator, TextBlock text, bool active)
+        {
+            indicator.SetResourceReference(Border.BackgroundProperty,
+                active ? "AccentFillColorDefaultBrush" : "ControlFillColorDefaultBrush");
+            indicator.SetResourceReference(Border.BorderBrushProperty,
+                active ? "AccentFillColorDefaultBrush" : "ControlStrokeColorDefaultBrush");
+            text.SetResourceReference(TextBlock.ForegroundProperty,
+                active ? "TextOnAccentFillColorPrimaryBrush" : "TextFillColorSecondaryBrush");
+            System.Windows.Automation.AutomationProperties.SetHelpText(indicator, active ? "Active" : "Inactive");
         }
 
         private async void OnSaveSettings(object sender, RoutedEventArgs e)
@@ -525,18 +470,6 @@ namespace ContourConfig.App
         }
 
         private void OnReconnect(object sender, RoutedEventArgs e) => Connect();
-        private async void OnLearnLeft(object sender, RoutedEventArgs e) => await LearnAsync(RollerEnd.Left);
-        private async void OnLearnRight(object sender, RoutedEventArgs e) => await LearnAsync(RollerEnd.Right);
         private void OnStopBoost(object sender, RoutedEventArgs e) => EmergencyStop();
-
-        private void OnResetMarkers(object sender, RoutedEventArgs e)
-        {
-            lock (gate)
-            {
-                markers = new();
-            }
-            ShowMarkerMapping();
-            Status.Text = "Marker mapping reset to defaults. Click Save settings to keep it.";
-        }
     }
 }

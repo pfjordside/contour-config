@@ -7,7 +7,7 @@
         Closed="OnClosed">
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="28">
-      <TextBlock Text="RollerMouse end-drift booster" FontSize="26" FontWeight="SemiBold" />
+      <TextBlock Text="Contour RollerMouse end-drift booster" FontSize="26" FontWeight="SemiBold" />
       <TextBlock Margin="0,6,0,18" TextWrapping="Wrap"
                  Text="Listens for the RollerMouse's own roller-end signals and adds extra sideways movement while an end is held. Normal pointer movement is not changed." />
       <GroupBox Header="1. Device">
@@ -20,17 +20,21 @@
                      Text="Keep Contour's own cursor drift set to Slow or Fast (not Immediate). The end signals may not be sent when drift is Off." />
         </StackPanel>
       </GroupBox>
-      <GroupBox Header="2. End markers">
+      <GroupBox Header="2. Roller ends">
         <StackPanel>
-          <TextBlock x:Name="MarkerMonitor" FontFamily="Consolas" FontSize="15" Text="Waiting for reports..." />
-          <TextBlock x:Name="MarkerMapping" Margin="0,8,0,10" Text="" />
-          <TextBlock TextWrapping="Wrap" Margin="0,0,0,10"
-                     Text="Hold an end and check the monitor shows LEFT or RIGHT. If it is wrong, click Learn and hold that end of the roller for 4 seconds." />
-          <WrapPanel>
-            <Button x:Name="LearnLeft" Content="Learn left end" Click="OnLearnLeft" />
-            <Button x:Name="LearnRight" Content="Learn right end" Click="OnLearnRight" />
-            <Button Content="Reset to defaults" Click="OnResetMarkers" />
-          </WrapPanel>
+          <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                     Text="Push the roller to one end and hold it. The matching side lights up when the RollerMouse reports it." />
+          <StackPanel Orientation="Horizontal">
+            <Border x:Name="LeftIndicator" Width="120" Padding="0,8" CornerRadius="4" BorderThickness="1" Margin="0,0,12,0"
+                    AutomationProperties.Name="Left end">
+              <TextBlock x:Name="LeftIndicatorText" Text="◀  Left" HorizontalAlignment="Center" FontWeight="SemiBold" />
+            </Border>
+            <Border x:Name="RightIndicator" Width="120" Padding="0,8" CornerRadius="4" BorderThickness="1"
+                    AutomationProperties.Name="Right end">
+              <TextBlock x:Name="RightIndicatorText" Text="Right  ▶" HorizontalAlignment="Center" FontWeight="SemiBold" />
+            </Border>
+            <TextBlock x:Name="BoostState" Margin="16,0,0,0" VerticalAlignment="Center" Text="Boost is off" />
+          </StackPanel>
         </StackPanel>
       </GroupBox>
       <GroupBox Header="3. Additional drift speed">
@@ -73,7 +77,7 @@
           <CheckBox x:Name="EnableOnStart" Margin="0,8,0,0" Content="Enable boost automatically when the app starts (saved with settings)" />
           <CheckBox x:Name="StartWithWindows" Margin="0,8,0,0" Content="Start with Windows (in the notification area)"
                     Checked="OnStartWithWindowsChanged" Unchecked="OnStartWithWindowsChanged" />
-          <TextBlock Margin="0,10,0,12" FontWeight="SemiBold" Text="Emergency stop: Ctrl + Alt + F10. Closing this app also stops boosting." />
+          <TextBlock Margin="0,10,0,12" FontWeight="SemiBold" Text="Emergency stop: Ctrl + Alt + F10. Exit from the tray icon also stops boosting." />
           <WrapPanel>
             <Button Content="Stop boost" Click="OnStopBoost" />
             <Button x:Name="SaveSettings" Content="Save settings" Click="OnSaveSettings" Style="{StaticResource PrimaryButton}" />
