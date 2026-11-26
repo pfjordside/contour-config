@@ -97,7 +97,7 @@ On Windows 11 new icons first appear in the hidden-icons flyout (the **^** arrow
 
 ### Stopping the boost
 
-Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F10</kbd>, click **Stop boost**, untick **Enable boost** (in the window or the tray menu), or choose **Exit** in the tray menu. As a safety measure, the boost also stops by itself after 15 seconds of continuous hold, on disconnect, and when the PC locks or sleeps. If *Enable boost automatically* is saved, it comes back after unlock or resume.
+Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F10</kbd>, click **Stop boost**, untick **Enable boost** (in the window or the tray menu), or choose **Exit** in the tray menu. As a safety measure, movement also stops after 15 seconds of continuous hold or on device disconnect. Boost pauses when the Windows session locks or disconnects, or the PC sleeps, and returns to its previous enabled or disabled state when the session and PC are available again. A fresh roller-end signal is required before movement resumes. *Enable boost automatically* controls app startup separately.
 
 ### Start with Windows
 
