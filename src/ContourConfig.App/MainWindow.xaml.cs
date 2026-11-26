@@ -24,11 +24,10 @@ namespace ContourConfig.App
         private readonly Stopwatch clock = Stopwatch.StartNew();
         // Guards state shared between the HID read loop, the boost thread and the UI thread.
         private readonly Lock gate = new();
+        private readonly BoostController boost = new();
         private EndMarkerMap markers = new();
         private RollerMouseHid? device;
         private CancellationTokenSource? connection;
-        private EndDriftBooster? booster;
-        private RollerEnd currentEnd;
         private RollerEnd? shownEnd;
         private Thread? boostThread;
         private HwndSource? source;
@@ -216,7 +215,7 @@ namespace ContourConfig.App
             string message = "RollerMouse disconnected. Reconnecting automatically when it is back...";
             try
             {
-                await hid.ReadAsync(OnReport, cancellationToken).ConfigureAwait(false);
+                await hid.ReadAsync(report => OnReport(report, cancellationToken), cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -241,15 +240,18 @@ namespace ContourConfig.App
             });
         }
 
-        private void OnReport(byte[] report)
+        private void OnReport(byte[] report, CancellationToken cancellationToken)
         {
             double now = clock.Elapsed.TotalMilliseconds;
             lock (gate)
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
                 if (markers.Decode(report) is RollerEnd end)
                 {
-                    currentEnd = end;
-                    booster?.Update(end, now);
+                    boost.Update(end, now);
                 }
             }
         }
@@ -258,8 +260,7 @@ namespace ContourConfig.App
         {
             lock (gate)
             {
-                currentEnd = end;
-                booster?.Update(end, clock.Elapsed.TotalMilliseconds);
+                boost.Update(end, clock.Elapsed.TotalMilliseconds);
             }
         }
 
@@ -268,20 +269,19 @@ namespace ContourConfig.App
             NativeMethods.Input[] input = [new() { Type = 0 }];
             while (!lifetime.IsCancellationRequested)
             {
-                int dx;
                 lock (gate)
                 {
-                    dx = booster?.Tick(clock.Elapsed.TotalMilliseconds) ?? 0;
-                }
-                if (dx != 0)
-                {
-                    input[0].Data.Mouse = new()
+                    int dx = boost.Tick(clock.Elapsed.TotalMilliseconds);
+                    if (dx != 0)
                     {
-                        X = dx,
-                        Flags = NativeMethods.MouseMoveRelative,
-                        ExtraInfo = NativeMethods.InjectionTag
-                    };
-                    _ = NativeMethods.SendInput(1, input, Marshal.SizeOf<NativeMethods.Input>());
+                        input[0].Data.Mouse = new()
+                        {
+                            X = dx,
+                            Flags = NativeMethods.MouseMoveRelative,
+                            ExtraInfo = NativeMethods.InjectionTag
+                        };
+                        _ = NativeMethods.SendInput(1, input, Marshal.SizeOf<NativeMethods.Input>());
+                    }
                 }
                 Thread.Sleep(5);
             }
@@ -291,11 +291,12 @@ namespace ContourConfig.App
 
         private void StartBoost()
         {
-            EndDriftBooster created = new(ReadOptions());
+            DriftOptions options = ReadOptions();
             lock (gate)
             {
-                created.Update(currentEnd, clock.Elapsed.TotalMilliseconds);
-                booster = created;
+                double now = clock.Elapsed.TotalMilliseconds;
+                boost.SetOptions(options, now);
+                boost.SetEnabled(true, now);
             }
         }
 
@@ -303,7 +304,7 @@ namespace ContourConfig.App
         {
             lock (gate)
             {
-                booster = null;
+                boost.SetEnabled(false, clock.Elapsed.TotalMilliseconds);
             }
         }
 
@@ -318,10 +319,12 @@ namespace ContourConfig.App
         {
             RollerEnd end;
             bool boosting;
+            bool suspended;
             lock (gate)
             {
-                end = currentEnd;
-                boosting = booster is not null;
+                end = boost.End;
+                boosting = boost.Enabled;
+                suspended = boost.IsSuspended;
             }
             if (end != shownEnd)
             {
@@ -329,8 +332,9 @@ namespace ContourConfig.App
                 ShowIndicator(LeftIndicator, LeftIndicatorText, end == RollerEnd.Left);
                 ShowIndicator(RightIndicator, RightIndicatorText, end == RollerEnd.Right);
             }
-            BoostState.Text = boosting ? "Boost is on" : "Boost is off";
-            tray?.Update($"Contour Config\nBoost {(boosting ? "on" : "off")} · {(device is null ? "RollerMouse not connected" : "RollerMouse connected")}",
+            string boostState = !boosting ? "off" : suspended ? "paused" : "on";
+            BoostState.Text = $"Boost is {boostState}";
+            tray?.Update($"Contour Config\nBoost {boostState} · {(device is null ? "RollerMouse not connected" : "RollerMouse connected")}",
                 EnableBoost.IsChecked == true, EnableBoost.IsEnabled);
         }
 
@@ -410,41 +414,63 @@ namespace ContourConfig.App
 
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
         {
-            bool resumed = e.Mode == PowerModes.Resume;
+            if (e.Mode is not (PowerModes.Suspend or PowerModes.Resume))
+            {
+                return;
+            }
             _ = Dispatcher.BeginInvoke(() =>
             {
-                EmergencyStop();
-                Status.Text = "Power state changed. Boost is off.";
-                if (resumed)
+                if (closed)
                 {
-                    Connect();
-                    RestoreAutomaticBoost();
+                    return;
                 }
+                if (e.Mode == PowerModes.Resume)
+                {
+                    Disconnect();
+                    SetBoostSuspended(BoostSuspension.SystemSuspended, false);
+                    Connect();
+                    return;
+                }
+                SetBoostSuspended(BoostSuspension.SystemSuspended, true);
             });
         }
 
         private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
         {
-            bool returned = e.Reason is SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon
-                or SessionSwitchReason.ConsoleConnect or SessionSwitchReason.RemoteConnect;
+            (BoostSuspension reason, bool suspended) = e.Reason switch
+            {
+                SessionSwitchReason.SessionLock or SessionSwitchReason.SessionLogoff => (BoostSuspension.SessionLocked, true),
+                SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon => (BoostSuspension.SessionLocked, false),
+                SessionSwitchReason.ConsoleDisconnect or SessionSwitchReason.RemoteDisconnect => (BoostSuspension.SessionDisconnected, true),
+                SessionSwitchReason.ConsoleConnect or SessionSwitchReason.RemoteConnect => (BoostSuspension.SessionDisconnected, false),
+                _ => (BoostSuspension.None, false)
+            };
+            if (reason == BoostSuspension.None)
+            {
+                return;
+            }
             _ = Dispatcher.BeginInvoke(() =>
             {
-                EmergencyStop();
-                Status.Text = "Windows session changed. Boost is off.";
-                if (returned)
+                if (!closed)
                 {
-                    RestoreAutomaticBoost();
+                    SetBoostSuspended(reason, suspended);
                 }
             });
         }
 
-        // Only the explicit "enable automatically" setting turns boost back on after a lock or sleep.
-        private void RestoreAutomaticBoost()
+        private void SetBoostSuspended(BoostSuspension reason, bool suspended)
         {
-            if (!closed && hotkeyRegistered && EnableOnStart.IsChecked == true)
+            bool enabled;
+            bool stillSuspended;
+            lock (gate)
             {
-                EnableBoost.IsChecked = true;
+                boost.SetSuspended(reason, suspended, clock.Elapsed.TotalMilliseconds);
+                enabled = boost.Enabled;
+                stillSuspended = boost.IsSuspended;
             }
+            Status.Text = !enabled ? "Boost is off." : stillSuspended
+                ? "Boost is paused while Windows is unavailable."
+                : "Boost enabled. Hold a roller end to drift faster.";
         }
 
         // Runs however the window goes away (Exit, installer WM_CLOSE, or its hidden owner being destroyed).
