@@ -14,6 +14,7 @@ namespace ContourConfig.Core
         private DriftOptions options = new();
         private EndDriftBooster? booster;
         private BoostSuspension suspension;
+        private double resumedAtMilliseconds = double.NegativeInfinity;
 
         public bool Enabled { get; private set; }
         public bool IsSuspended => suspension != BoostSuspension.None;
@@ -56,15 +57,19 @@ namespace ContourConfig.Core
                 End = RollerEnd.None;
                 booster = null;
             }
-            else if (wasSuspended && !IsSuspended && Enabled)
+            else if (wasSuspended && !IsSuspended)
             {
-                Start(nowMilliseconds);
+                resumedAtMilliseconds = nowMilliseconds;
+                if (Enabled)
+                {
+                    Start(nowMilliseconds);
+                }
             }
         }
 
         public void Update(RollerEnd end, double nowMilliseconds)
         {
-            if (!IsSuspended)
+            if (!IsSuspended && nowMilliseconds >= resumedAtMilliseconds)
             {
                 End = end;
                 booster?.Update(end, nowMilliseconds);

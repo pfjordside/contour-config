@@ -51,6 +51,24 @@ namespace ContourConfig.Core.Tests.Unit
         }
 
         [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void Update_TimestampedBeforeFinalResumeIsRejected(bool enabled)
+        {
+            BoostController controller = Create();
+            controller.SetEnabled(enabled, 0);
+            controller.SetSuspended(BoostSuspension.SystemSuspended, true, 10);
+            controller.SetSuspended(BoostSuspension.SystemSuspended, false, 40);
+
+            controller.Update(RollerEnd.Right, 20);
+            Assert.Equal(RollerEnd.None, controller.End);
+            Assert.Equal(0, controller.Tick(50));
+
+            controller.Update(RollerEnd.Right, 40);
+            Assert.Equal(RollerEnd.Right, controller.End);
+        }
+
+        [Theory]
         [InlineData(false)]
         [InlineData(true)]
         public void Resume_DoesNotEnableBoostThatWasOffOrStoppedWhilePaused(bool stopWhilePaused)
