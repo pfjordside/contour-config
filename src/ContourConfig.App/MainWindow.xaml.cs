@@ -215,7 +215,7 @@ namespace ContourConfig.App
             string message = "RollerMouse disconnected. Reconnecting automatically when it is back...";
             try
             {
-                await hid.ReadAsync(OnReport, cancellationToken).ConfigureAwait(false);
+                await hid.ReadAsync(report => OnReport(report, cancellationToken), cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -240,11 +240,15 @@ namespace ContourConfig.App
             });
         }
 
-        private void OnReport(byte[] report)
+        private void OnReport(byte[] report, CancellationToken cancellationToken)
         {
             double now = clock.Elapsed.TotalMilliseconds;
             lock (gate)
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
                 if (markers.Decode(report) is RollerEnd end)
                 {
                     boost.Update(end, now);
@@ -422,9 +426,12 @@ namespace ContourConfig.App
                 }
                 if (e.Mode == PowerModes.Resume)
                 {
+                    Disconnect();
+                    SetBoostSuspended(BoostSuspension.SystemSuspended, false);
                     Connect();
+                    return;
                 }
-                SetBoostSuspended(BoostSuspension.SystemSuspended, e.Mode == PowerModes.Suspend);
+                SetBoostSuspended(BoostSuspension.SystemSuspended, true);
             });
         }
 
